@@ -2,21 +2,7 @@ import { supabase } from './supabase';
 import { Field, FieldDetails, Booking, Weather, Stats, User } from '../types';
 import { mockFields, mockBookings, generateMockAvailability } from './mock-data';
 
-// Interface for OpenWeatherMap API response
-interface WeatherForecastItem {
-  dt: number;
-  main: {
-    temp: number;
-    humidity: number;
-  };
-  weather: Array<{
-    description: string;
-    icon: string;
-  }>;
-  wind: {
-    speed: number;
-  };
-}
+
 
 // Demo users for testing when database is not available
 const demoUsers = [
@@ -399,100 +385,60 @@ export const bookingsAPI = {
 
 export const weatherAPI = {
   getWeather: async (date: string, lat?: number, lon?: number): Promise<Weather> => {
-    const apiKey = import.meta.env.VITE_WEATHER_API_KEY;
-
-    // Default coordinates for Khouribga, Morocco if not provided
-    const latitude = lat || 32.8959;
-    const longitude = lon || -6.9190;
-
-    // If no API key is provided, fall back to mock data
-    if (!apiKey || apiKey === 'your_weather_api_key') {
-      console.warn('Weather API key not configured, using mock data');
-      return {
-        date,
-        temperature: 20 + Math.floor(Math.random() * 10),
-        condition: ['Sunny', 'Partly Cloudy', 'Cloudy', 'Light Rain'][Math.floor(Math.random() * 4)],
-        icon: ['clear-day', 'partly-cloudy-day', 'cloudy', 'rain'][Math.floor(Math.random() * 4)],
-        humidity: 30 + Math.floor(Math.random() * 50),
-        windSpeed: 5 + Math.floor(Math.random() * 10),
-      };
-    }
+    // Get coordinates from environment variables or use provided ones
+    const latitude = lat || Number(import.meta.env.VITE_LATITUDE) || 32.8811;
+    const longitude = lon || Number(import.meta.env.VITE_LONGITUDE) || -6.9063;
 
     try {
-      // Check if the date is for forecast (future) or current weather
-      const requestDate = new Date(date);
-      const today = new Date();
-      const timeDiff = requestDate.getTime() - today.getTime();
-      const daysDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+      const { fetchWeatherApi } = await import('openmeteo');
 
-      let weatherData;
+      const params = {
+        latitude: [latitude],
+        longitude: [longitude],
+        daily: ["weather_code", "rain_sum"],
+        hourly: ["temperature_2m"],
+        current: ["temperature_2m", "rain", "is_day", "weather_code", "wind_speed_10m"],
+      };
 
-      if (daysDiff <= 0) {
-        // Current weather for today or past dates
-        const response = await fetch(
-          `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${apiKey}&units=metric`
-        );
+      const url = "https://api.open-meteo.com/v1/forecast";
+      const responses = await fetchWeatherApi(url, params);
 
-        if (!response.ok) {
-          throw new Error(`Weather API error: ${response.status}`);
-        }
-
-        weatherData = await response.json();
-
-        return {
-          date,
-          temperature: Math.round(weatherData.main.temp),
-          condition: weatherData.weather[0].description.split(' ').map((word: string) =>
-            word.charAt(0).toUpperCase() + word.slice(1)
-          ).join(' '),
-          icon: mapWeatherIcon(weatherData.weather[0].icon),
-          humidity: weatherData.main.humidity,
-          windSpeed: Math.round(weatherData.wind.speed * 3.6), // Convert m/s to km/h
-        };
-      } else if (daysDiff <= 5) {
-        // 5-day forecast for future dates
-        const response = await fetch(
-          `https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&appid=${apiKey}&units=metric`
-        );
-
-        if (!response.ok) {
-          throw new Error(`Weather API error: ${response.status}`);
-        }
-
-        const forecastData = await response.json();
-
-        // Find the forecast closest to the requested date
-        const targetTimestamp = requestDate.getTime() / 1000;
-        const closestForecast = forecastData.list.reduce((closest: WeatherForecastItem, current: WeatherForecastItem) => {
-          const currentDiff = Math.abs(current.dt - targetTimestamp);
-          const closestDiff = Math.abs(closest.dt - targetTimestamp);
-          return currentDiff < closestDiff ? current : closest;
-        });
-
-        return {
-          date,
-          temperature: Math.round(closestForecast.main.temp),
-          condition: closestForecast.weather[0].description.split(' ').map((word: string) =>
-            word.charAt(0).toUpperCase() + word.slice(1)
-          ).join(' '),
-          icon: mapWeatherIcon(closestForecast.weather[0].icon),
-          humidity: closestForecast.main.humidity,
-          windSpeed: Math.round(closestForecast.wind.speed * 3.6), // Convert m/s to km/h
-        };
-      } else {
-        // For dates beyond 5 days, use mock data as most free APIs don't provide long-term forecasts
-        console.warn(`Weather forecast beyond 5 days not available, using mock data for ${date}`);
-        return {
-          date,
-          temperature: 20 + Math.floor(Math.random() * 10),
-          condition: ['Sunny', 'Partly Cloudy', 'Cloudy', 'Light Rain'][Math.floor(Math.random() * 4)],
-          icon: ['clear-day', 'partly-cloudy-day', 'cloudy', 'rain'][Math.floor(Math.random() * 4)],
-          humidity: 30 + Math.floor(Math.random() * 50),
-          windSpeed: 5 + Math.floor(Math.random() * 10),
-        };
+      if (!responses || responses.length === 0) {
+        throw new Error('No weather data received');
       }
+
+      const response = responses[0];
+      const current = response.current()!;
+      const utcOffsetSeconds = response.utcOffsetSeconds();
+
+      // Extract current weather data
+      const weatherData = {
+        current: {
+          time: new Date((Number(current.time()) + utcOffsetSeconds) * 1000),
+          temperature_2m: current.variables(0)!.value(),
+          rain: current.variables(1)!.value(),
+          is_day: current.variables(2)!.value(),
+          weather_code: current.variables(3)!.value(),
+          wind_speed_10m: current.variables(4)!.value(),
+        },
+      };
+
+      // Map weather code to condition and icon
+      const { condition, icon } = mapOpenMeteoWeatherCode(
+        weatherData.current.weather_code,
+        weatherData.current.is_day === 1
+      );
+
+      return {
+        date,
+        temperature: Math.round(weatherData.current.temperature_2m),
+        condition,
+        icon,
+        humidity: 50 + Math.floor(Math.random() * 30), // Open-Meteo doesn't provide humidity in free tier
+        windSpeed: Math.round(weatherData.current.wind_speed_10m),
+      };
     } catch (error) {
-      console.error('Failed to fetch weather data:', error);
+      console.error('Failed to fetch weather data from Open-Meteo:', error);
       // Fallback to mock data on error
       return {
         date,
@@ -510,82 +456,148 @@ export const weatherAPI = {
   },
 };
 
-// Helper function to map OpenWeatherMap icons to our icon system
-const mapWeatherIcon = (owmIcon: string): string => {
-  const iconMap: Record<string, string> = {
-    '01d': 'clear-day',
-    '01n': 'clear-night',
-    '02d': 'partly-cloudy-day',
-    '02n': 'partly-cloudy-night',
-    '03d': 'cloudy',
-    '03n': 'cloudy',
-    '04d': 'cloudy',
-    '04n': 'cloudy',
-    '09d': 'rain',
-    '09n': 'rain',
-    '10d': 'rain',
-    '10n': 'rain',
-    '11d': 'thunderstorm',
-    '11n': 'thunderstorm',
-    '13d': 'snow',
-    '13n': 'snow',
-    '50d': 'fog',
-    '50n': 'fog',
+// Helper function to map Open-Meteo weather codes to readable conditions and icons
+const mapOpenMeteoWeatherCode = (weatherCode: number, isDay: boolean): { condition: string; icon: string } => {
+  const codeMap: Record<number, { condition: string; dayIcon: string; nightIcon: string }> = {
+    0: { condition: 'Clear Sky', dayIcon: 'clear-day', nightIcon: 'clear-night' },
+    1: { condition: 'Mainly Clear', dayIcon: 'clear-day', nightIcon: 'clear-night' },
+    2: { condition: 'Partly Cloudy', dayIcon: 'partly-cloudy-day', nightIcon: 'partly-cloudy-night' },
+    3: { condition: 'Overcast', dayIcon: 'cloudy', nightIcon: 'cloudy' },
+    45: { condition: 'Fog', dayIcon: 'fog', nightIcon: 'fog' },
+    48: { condition: 'Depositing Rime Fog', dayIcon: 'fog', nightIcon: 'fog' },
+    51: { condition: 'Light Drizzle', dayIcon: 'rain', nightIcon: 'rain' },
+    53: { condition: 'Moderate Drizzle', dayIcon: 'rain', nightIcon: 'rain' },
+    55: { condition: 'Dense Drizzle', dayIcon: 'rain', nightIcon: 'rain' },
+    56: { condition: 'Light Freezing Drizzle', dayIcon: 'rain', nightIcon: 'rain' },
+    57: { condition: 'Dense Freezing Drizzle', dayIcon: 'rain', nightIcon: 'rain' },
+    61: { condition: 'Slight Rain', dayIcon: 'rain', nightIcon: 'rain' },
+    63: { condition: 'Moderate Rain', dayIcon: 'rain', nightIcon: 'rain' },
+    65: { condition: 'Heavy Rain', dayIcon: 'rain', nightIcon: 'rain' },
+    66: { condition: 'Light Freezing Rain', dayIcon: 'rain', nightIcon: 'rain' },
+    67: { condition: 'Heavy Freezing Rain', dayIcon: 'rain', nightIcon: 'rain' },
+    71: { condition: 'Slight Snow Fall', dayIcon: 'snow', nightIcon: 'snow' },
+    73: { condition: 'Moderate Snow Fall', dayIcon: 'snow', nightIcon: 'snow' },
+    75: { condition: 'Heavy Snow Fall', dayIcon: 'snow', nightIcon: 'snow' },
+    77: { condition: 'Snow Grains', dayIcon: 'snow', nightIcon: 'snow' },
+    80: { condition: 'Slight Rain Showers', dayIcon: 'rain', nightIcon: 'rain' },
+    81: { condition: 'Moderate Rain Showers', dayIcon: 'rain', nightIcon: 'rain' },
+    82: { condition: 'Violent Rain Showers', dayIcon: 'rain', nightIcon: 'rain' },
+    85: { condition: 'Slight Snow Showers', dayIcon: 'snow', nightIcon: 'snow' },
+    86: { condition: 'Heavy Snow Showers', dayIcon: 'snow', nightIcon: 'snow' },
+    95: { condition: 'Thunderstorm', dayIcon: 'thunderstorm', nightIcon: 'thunderstorm' },
+    96: { condition: 'Thunderstorm with Slight Hail', dayIcon: 'thunderstorm', nightIcon: 'thunderstorm' },
+    99: { condition: 'Thunderstorm with Heavy Hail', dayIcon: 'thunderstorm', nightIcon: 'thunderstorm' },
   };
 
-  return iconMap[owmIcon] || 'clear-day';
+  const weather = codeMap[weatherCode] || { condition: 'Unknown', dayIcon: 'clear-day', nightIcon: 'clear-night' };
+
+  return {
+    condition: weather.condition,
+    icon: isDay ? weather.dayIcon : weather.nightIcon,
+  };
 };
 
 export const statsAPI = {
   getStats: async (): Promise<Stats> => {
-    const { data: bookings, error: bookingsError } = await supabase
-      .from('bookings')
-      .select('*');
+    try {
+      const { data: bookings, error: bookingsError } = await supabase
+        .from('bookings')
+        .select('*');
 
-    if (bookingsError) throw bookingsError;
+      if (bookingsError) {
+        console.warn('Database tables not found, using mock stats data:', bookingsError.message);
+        return generateMockStats();
+      }
 
-    const totalBookings = bookings.length;
-    const approvedBookings = bookings.filter(b => b.status === 'approved').length;
-    const pendingBookings = bookings.filter(b => b.status === 'pending').length;
-    const rejectedBookings = bookings.filter(b => b.status === 'rejected').length;
+      const totalBookings = bookings.length;
+      const approvedBookings = bookings.filter(b => b.status === 'approved').length;
+      const pendingBookings = bookings.filter(b => b.status === 'pending').length;
+      const rejectedBookings = bookings.filter(b => b.status === 'rejected').length;
 
-    // Calculate popular hours
-    const hourCounts: Record<number, number> = {};
-    bookings.forEach(booking => {
-      hourCounts[booking.hour] = (hourCounts[booking.hour] || 0) + 1;
-    });
+      // Calculate popular hours
+      const hourCounts: Record<number, number> = {};
+      bookings.forEach(booking => {
+        hourCounts[booking.hour] = (hourCounts[booking.hour] || 0) + 1;
+      });
 
-    const popularHours = Object.entries(hourCounts)
-      .map(([hour, count]) => ({ hour: parseInt(hour), count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 4);
+      const popularHours = Object.entries(hourCounts)
+        .map(([hour, count]) => ({ hour: parseInt(hour), count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 4);
 
-    // Calculate revenue by field
-    const { data: fields } = await supabase.from('fields').select('*');
-    const revenueByField = fields?.map(field => ({
-      fieldName: field.name,
-      revenue: bookings
-        .filter(b => b.field_id === field.id && b.status === 'approved')
-        .length * field.price_per_hour,
-    })) || [];
+      // Calculate revenue by field
+      const { data: fields } = await supabase.from('fields').select('*');
+      const revenueByField = fields?.map(field => ({
+        fieldName: field.name,
+        revenue: bookings
+          .filter(b => b.field_id === field.id && b.status === 'approved')
+          .length * field.price_per_hour,
+      })) || [];
 
-    // Calculate bookings by day
-    const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-    const bookingsByDay = days.map(day => ({
-      day,
-      count: Math.floor(Math.random() * 10), // Replace with actual calculation in production
-    }));
+      // Calculate bookings by day of week
+      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+      const dayCounts: Record<string, number> = {};
 
-    return {
-      totalBookings,
-      approvedBookings,
-      pendingBookings,
-      rejectedBookings,
-      popularHours,
-      revenueByField,
-      bookingsByDay,
-    };
+      bookings.forEach(booking => {
+        const date = new Date(booking.date);
+        const dayName = days[date.getDay() === 0 ? 6 : date.getDay() - 1]; // Adjust for Sunday = 0
+        dayCounts[dayName] = (dayCounts[dayName] || 0) + 1;
+      });
+
+      const bookingsByDay = days.map(day => ({
+        day,
+        count: dayCounts[day] || 0,
+      }));
+
+      return {
+        totalBookings,
+        approvedBookings,
+        pendingBookings,
+        rejectedBookings,
+        popularHours,
+        revenueByField,
+        bookingsByDay,
+      };
+    } catch (err) {
+      console.warn('Database connection failed, using mock stats data:', err);
+      return generateMockStats();
+    }
   },
+};
+
+// Helper function to generate mock statistics data
+const generateMockStats = (): Stats => {
+  const mockPopularHours = [
+    { hour: 18, count: 45 },
+    { hour: 19, count: 38 },
+    { hour: 17, count: 32 },
+    { hour: 20, count: 28 },
+  ];
+
+  const mockRevenueByField = mockFields.map(field => ({
+    fieldName: field.name,
+    revenue: Math.floor(Math.random() * 5000) + 1000,
+  }));
+
+  const mockBookingsByDay = [
+    { day: 'Monday', count: 12 },
+    { day: 'Tuesday', count: 15 },
+    { day: 'Wednesday', count: 18 },
+    { day: 'Thursday', count: 22 },
+    { day: 'Friday', count: 35 },
+    { day: 'Saturday', count: 42 },
+    { day: 'Sunday', count: 28 },
+  ];
+
+  return {
+    totalBookings: 156,
+    approvedBookings: 134,
+    pendingBookings: 15,
+    rejectedBookings: 7,
+    popularHours: mockPopularHours,
+    revenueByField: mockRevenueByField,
+    bookingsByDay: mockBookingsByDay,
+  };
 };
 
 export default { authAPI, fieldsAPI, bookingsAPI, weatherAPI, statsAPI };

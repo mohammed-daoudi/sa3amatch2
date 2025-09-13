@@ -1,18 +1,15 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TrendingUp, Users, Calendar, DollarSign, Clock, BarChart3 } from 'lucide-react';
-import { statsAPI, bookingsAPI } from '../../lib/api';
-import { Stats, Booking } from '../../types';
+import { statsAPI } from '../../lib/api';
+import { Stats } from '../../types';
 import { Button } from '../../components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend, AreaChart, Area } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, LineChart, Line, CartesianGrid, Legend } from 'recharts';
 
 const AdminStats: React.FC = () => {
   const navigate = useNavigate();
   const [stats, setStats] = React.useState<Stats | null>(null);
-  const [bookings, setBookings] = React.useState<Booking[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [selectedPeriod, setSelectedPeriod] = React.useState<'week' | 'month' | 'year'>('month');
 
   React.useEffect(() => {
     const fetchStats = async () => {

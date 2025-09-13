@@ -7,16 +7,20 @@ Create a `.env` or `.env.local` in the project root and use the values below (re
 VITE_SUPABASE_URL=https://ckdlgwswjfasclyyahrx.supabase.co
 VITE_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNrZGxnd3N3amZhc2NseXlhaHJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTczNjE3MzgsImV4cCI6MjA3MjkzNzczOH0.y6DJwxDGb70j09LTBvsq9j2Z4GiNLlyzW_o1pSERffA
 
-# Weather API (Optional)
-VITE_WEATHER_API_KEY=your_weather_api_key
-VITE_SUPABASE_SERVICE_ROLE_KEY=<<OPTIONAL_SERVICE_ROLE_KEY>>   # server-only, optional
+# Weather Configuration - Khouribga, Morocco
+VITE_LATITUDE=32.8811
+VITE_LONGITUDE=-6.9063
+
+# Optional configurations
+VITE_SUPABASE_SERVICE_ROLE_KEY=<<OPTIONAL_SERVICE_ROLE_KEY>>
 NEXT_PUBLIC_MAP_TILES_URL=<<MAP_TILES_URL>>
-VITE_STRIPE_SECRET_KEY=<<OPTIONAL_STRIPE_SECRET_KEY>>         # optional
-VITE_STRIPE_WEBHOOK_SECRET=<<OPTIONAL_STRIPE_WEBHOOK_SECRET>> # optional
+VITE_STRIPE_SECRET_KEY=<<OPTIONAL_STRIPE_SECRET_KEY>>
+VITE_STRIPE_WEBHOOK_SECRET=<<OPTIONAL_STRIPE_WEBHOOK_SECRET>>
 NEXT_PUBLIC_SITE_URL=<<SITE_URL>>
 
+
 WORKFLOW
-1. Clone the repository: https://github.com/mohammed-daoudi/sa3amatch.git
+1. Clone the repository: https://github.com/mohammed-daoudi/sa3amatch2.git.git
 2. Install dependencies (prefer Bun if available):
    - bun install
    - or npm install

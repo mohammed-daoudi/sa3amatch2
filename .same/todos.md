@@ -30,7 +30,7 @@ The database migration file exists at `supabase/migrations/20250429145306_black_
 - [x] Implement map clustering for multiple fields
 
 ## Weather Integration
-- [x] Integrate weather API for field locations
+- [x] Integrate weather API for field locations (Updated to Open-Meteo API)
 - [x] Display weather information on field cards
 - [x] Show weather forecasts for booking dates
 
@@ -38,7 +38,7 @@ The database migration file exists at `supabase/migrations/20250429145306_black_
 - [x] Create admin authentication and role-based access
 - [x] Implement admin field management (CRUD operations)
 - [x] Set up admin booking oversight functionality
-- [ ] Add statistics and analytics dashboard
+- [x] Add statistics and analytics dashboard
 
 ## UI/UX Improvements
 - [ ] Ensure responsive design across all pages
